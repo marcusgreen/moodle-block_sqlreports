@@ -50,9 +50,20 @@ class block_sqlreports_edit_form extends block_edit_form {
         $mform->setType('config_displaymode', PARAM_ALPHA);
         $mform->setDefault('config_displaymode', 'auto');
 
-        $mform->addElement('text', 'config_rowlimit', get_string('rowlimit', 'block_sqlreports'));
+        // 0 = All (fetch caps internally at 5000). Named options keep the block's initial render small
+        // while letting a viewer expand via the "Show all" toggle in the block itself.
+        $rowlimits = [
+            5   => 5,
+            10  => 10,
+            25  => 25,
+            50  => 50,
+            100 => 100,
+            0   => get_string('rowsall', 'block_sqlreports'),
+        ];
+        $mform->addElement('select', 'config_rowlimit', get_string('rowlimit', 'block_sqlreports'), $rowlimits);
         $mform->setType('config_rowlimit', PARAM_INT);
-        $mform->setDefault('config_rowlimit', 10);
+        $mform->setDefault('config_rowlimit', 0);
+        $mform->addHelpButton('config_rowlimit', 'rowlimit', 'block_sqlreports');
 
         $mform->addElement('advcheckbox', 'config_showfull', get_string('showfull', 'block_sqlreports'));
         $mform->setType('config_showfull', PARAM_BOOL);

@@ -54,6 +54,7 @@ class mobile {
             'rows'    => [],
             'norows'  => get_string('norows', 'block_sqlreports'),
             'error'   => '',
+            'rowcount' => '',
             'fullurl' => '',
             'viewfull' => get_string('viewfull', 'block_sqlreports'),
         ];
@@ -81,10 +82,13 @@ class mobile {
         $coursecontext = $blockinstance->context->get_course_context(false);
         $pagecourseid = $coursecontext ? (int) $coursecontext->instanceid : 0;
 
-        $rowlimit = max(1, min(100, (int) ($config->rowlimit ?? 10)));
+        // Configured row limit: 0 = All (fetch caps internally at 5000). The app has no in-place
+        // expand, so it just honours the configured limit.
+        $rowlimit = (int) ($config->rowlimit ?? 0);
 
         try {
-            $rows = $query->fetch_rows_for_viewer($rowlimit, $pagecourseid);
+            $rows  = $query->fetch_rows_for_viewer($rowlimit, $pagecourseid);
+            $total = $query->count_rows_for_viewer($pagecourseid);
         } catch (\moodle_exception $e) {
             // Misconfigured filter column (fails closed). Neutral message, never raw rows.
             $data['error'] = get_string('errdata', 'block_sqlreports');
@@ -106,6 +110,11 @@ class mobile {
                 );
                 $data['rows'][] = ['cells' => $cells];
             }
+            // Accurate label: "Showing N of M" while limited, plain "M rows" when all are shown.
+            $shown = count($rows);
+            $data['rowcount'] = ($shown < $total)
+                ? get_string('rowcountpartial', 'block_sqlreports', (object) ['shown' => $shown, 'total' => $total])
+                : get_string('rowcount', 'block_sqlreports', $total);
         }
 
         // Offer a link to the full RB report (opened in the app's in-app browser).

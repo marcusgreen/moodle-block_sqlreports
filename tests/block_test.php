@@ -269,6 +269,50 @@ final class block_test extends \advanced_testcase {
         $this->assertStringNotContainsString((string) $epoch, $html);
     }
 
+    public function test_get_content_show_all_toggle(): void {
+        global $CFG, $PAGE;
+        require_once($CFG->dirroot . '/blocks/moodleblock.class.php');
+        require_once($CFG->dirroot . '/blocks/sqlreports/block_sqlreports.php');
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $gen = $this->getDataGenerator();
+        for ($i = 0; $i < 12; $i++) {
+            $gen->create_user();
+        }
+        $total = (int) $GLOBALS['DB']->count_records('user', ['deleted' => 0]);
+
+        $id = query::save($this->formdata(['querysql' => 'SELECT id, username FROM {user}']));
+        query::get($id)->publish();
+
+        // Capped to 5: footer shows "Showing 5 of N" plus a Show all link carrying this block's id.
+        $block = new \block_sqlreports();
+        $block->init();
+        $block->config   = (object) ['queryid' => $id, 'displaymode' => 'table', 'rowlimit' => 5];
+        $block->instance = (object) ['id' => 4242];
+        $PAGE->set_url('/');
+        $block->page = $PAGE;
+
+        $footer = $block->get_content()->footer;
+        $this->assertStringContainsString(get_string('rowcountpartial', 'block_sqlreports',
+            (object) ['shown' => 5, 'total' => $total]), $footer);
+        $this->assertStringContainsString('sqlreportsall=4242', $footer);
+
+        // With the expand param set for this block, every row is shown and a Show fewer link appears.
+        $_GET['sqlreportsall'] = 4242;
+        $expandedblock = new \block_sqlreports();
+        $expandedblock->init();
+        $expandedblock->config   = (object) ['queryid' => $id, 'displaymode' => 'table', 'rowlimit' => 5];
+        $expandedblock->instance = (object) ['id' => 4242];
+        $expandedblock->page = $PAGE;
+
+        $expandedfooter = $expandedblock->get_content()->footer;
+        $this->assertStringContainsString(get_string('rowcount', 'block_sqlreports', $total), $expandedfooter);
+        $this->assertStringContainsString(get_string('showfewer', 'block_sqlreports'), $expandedfooter);
+        unset($_GET['sqlreportsall']);
+    }
+
     public function test_get_content_empty_when_unconfigured_and_not_editing(): void {
         global $CFG, $PAGE;
         require_once($CFG->dirroot . '/blocks/moodleblock.class.php');
