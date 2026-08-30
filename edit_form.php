@@ -54,6 +54,11 @@ class block_sqlreports_edit_form extends block_edit_form {
         $mform->setType('config_rowlimit', PARAM_INT);
         $mform->setDefault('config_rowlimit', 10);
 
+        $mform->addElement('advcheckbox', 'config_showfull', get_string('showfull', 'block_sqlreports'));
+        $mform->setType('config_showfull', PARAM_BOOL);
+        $mform->setDefault('config_showfull', 1);
+        $mform->addHelpButton('config_showfull', 'showfull', 'block_sqlreports');
+
         $mform->addElement('text', 'config_title', get_string('blocktitle', 'block_sqlreports'));
         $mform->setType('config_title', PARAM_TEXT);
     }

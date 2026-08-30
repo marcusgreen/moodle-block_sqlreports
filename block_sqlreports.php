@@ -151,9 +151,14 @@ class block_sqlreports extends block_base {
             $this->content->text = $this->render_table($rows, $query);
         }
 
-        if (!empty($rec->reportid)) {
+        $showfull = (bool) ($this->config->showfull ?? 1);
+        if ($showfull && !empty($rec->reportid)) {
             $url = new moodle_url('/reportbuilder/view.php', ['id' => (int) $rec->reportid]);
-            $this->content->footer = html_writer::link($url, get_string('viewfull', 'block_sqlreports'));
+            $this->content->footer = html_writer::link(
+                $url,
+                get_string('viewfull', 'block_sqlreports'),
+                ['title' => get_string('viewfull_title', 'block_sqlreports')]
+            );
         }
 
         return $this->content;
