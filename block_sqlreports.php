@@ -217,7 +217,7 @@ class block_sqlreports extends block_base {
             }
         }
 
-        $showfull = (bool) ($this->config->showfull ?? 1);
+        $showfull = (bool) ($this->config->showfull ?? 0);
         if ($showfull && !empty($rec->reportid)) {
             $fullurl = new moodle_url('/reportbuilder/view.php', ['id' => (int) $rec->reportid]);
             $footer .= html_writer::link(

@@ -109,7 +109,8 @@ final class block_test extends \advanced_testcase {
 
         $block = new \block_sqlreports();
         $block->init();
-        $block->config = (object) ['queryid' => $id, 'displaymode' => 'table', 'rowlimit' => 5];
+        // showfull is off by default; opt in so the footer link is present to assert on.
+        $block->config = (object) ['queryid' => $id, 'displaymode' => 'table', 'rowlimit' => 5, 'showfull' => 1];
         $PAGE->set_url('/');
         $block->page = $PAGE;
 
@@ -267,6 +268,27 @@ final class block_test extends \advanced_testcase {
         // %%TIMESTAMP(..., dd/mm/yyyy)%%: epoch formatted as a date, not the bare integer.
         $this->assertStringContainsString(userdate($epoch, '%d/%m/%Y', 99, false), $html);
         $this->assertStringNotContainsString((string) $epoch, $html);
+    }
+
+    public function test_get_content_full_report_link_off_by_default(): void {
+        global $CFG, $PAGE;
+        require_once($CFG->dirroot . '/blocks/moodleblock.class.php');
+        require_once($CFG->dirroot . '/blocks/sqlreports/block_sqlreports.php');
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $id = query::save($this->formdata(['querysql' => 'SELECT id, username FROM {user}']));
+        query::get($id)->publish();
+
+        $block = new \block_sqlreports();
+        $block->init();
+        // No showfull key: defaults to off, so the full-report link must not appear.
+        $block->config = (object) ['queryid' => $id, 'displaymode' => 'table', 'rowlimit' => 5];
+        $PAGE->set_url('/');
+        $block->page = $PAGE;
+
+        $this->assertStringNotContainsString('/reportbuilder/view.php', $block->get_content()->footer);
     }
 
     public function test_get_content_show_all_toggle(): void {

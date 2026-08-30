@@ -56,7 +56,7 @@ Set via the block's edit form (`edit_form.php`):
 | Report | `config_queryid` | Which published report to show |
 | Display as | `config_displaymode` | `auto` / `table` / `chart` |
 | Rows to show | `config_rowlimit` | `5` / `10` / `25` / `50` / `100` / **All**; default **All** (`0`). A numeric limit shows a "Show all" toggle in the block; All caps internally at 5000. |
-| Show "View full report" link | `config_showfull` | On by default. Turn off to hide the full-report link (which is not course-scoped) and keep viewers in the block's course-scoped view. |
+| Show "View full report" link | `config_showfull` | **Off by default** (keeps viewers in the block's course-scoped view). Turn on to add the full-report link, which is not course-scoped. |
 | Custom block title | `config_title` | Overrides the report name |
 
 Multiple instances are allowed per page (`instance_allow_multiple()`), so you can pin several

@@ -119,7 +119,7 @@ class mobile {
 
         // Offer a link to the full RB report (opened in the app's in-app browser).
         $rec = $query->record();
-        $showfull = (bool) ($config->showfull ?? 1);
+        $showfull = (bool) ($config->showfull ?? 0);
         if ($showfull && !empty($rec->reportid)) {
             $url = new moodle_url('/reportbuilder/view.php', ['id' => (int) $rec->reportid]);
             $data['fullurl'] = $url->out(false);
