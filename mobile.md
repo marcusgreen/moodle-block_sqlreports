@@ -106,7 +106,10 @@ The view method receives `$args` (contains `contextlevel`, `instanceid`/`context
 3. `require_login` / context check, then `$query->current_user_can_view_report()`. On failure return
    an empty template (block hides), matching web behaviour.
 4. `$rows = $query->fetch_rows_for_viewer($rowlimit, $pagecourseid)` inside try/catch; on
-   `moodle_exception` return the `errdata` message, never raw rows.
+   `moodle_exception` return the `errdata` message, never raw rows. `rowlimit` `0` means All
+   (fetch caps at 5000). Also call `$query->count_rows_for_viewer($pagecourseid)` for an accurate
+   total and send a `rowcount` string (`Showing N of M rows` / `M rows`). The app has no in-place
+   "Show all" toggle — it just honours the configured limit.
 5. Return `templates`, `otherdata`, `javascript`.
 
 Return shape:

@@ -34,8 +34,18 @@ report viewer.
 - **Expandable charts.** A narrow block region is cramped for a chart, so chart mode adds an
   **Expand** button. It opens a large modal that re-renders the same chart client-side
   (`core/chart_builder`), with a fullscreen toggle (`amd/src/expand.js`).
-- **Links to the full report.** The footer links to `/reportbuilder/view.php` for the underlying
-  report.
+- **Shows a row count.** The footer states how many rows the viewer is seeing — `Showing N of M
+  rows` while limited, or `M rows` when everything is shown. The total is an accurate,
+  viewer-scoped count (`query::count_rows_for_viewer()`), not just the number rendered.
+- **"Show all" without leaving the page.** When a numeric row limit is set and the report has
+  more rows, the footer offers a **Show all** / **Show fewer** toggle. It re-renders the *same*
+  page (`?sqlreportsall=<blockid>`), so the block's **course scope is preserved** — unlike "View
+  full report" below. Each block instance on a page expands independently. Charts have no toggle
+  (a chart aggregates every fetched row, so paging it is meaningless).
+- **Links to the full report.** When enabled, the footer links to `/reportbuilder/view.php` for
+  the underlying report. Note this opens the **full** Report Builder report, which is **not**
+  limited to the current course — on a course page the block itself is course-scoped, but the
+  full report is not. A tooltip on the link says so, and the link can be hidden per instance.
 
 ## Configuration (per block instance)
 
@@ -45,7 +55,8 @@ Set via the block's edit form (`edit_form.php`):
 |---|---|---|
 | Report | `config_queryid` | Which published report to show |
 | Display as | `config_displaymode` | `auto` / `table` / `chart` |
-| Maximum rows | `config_rowlimit` | Clamped to 1–100, default 10 |
+| Rows to show | `config_rowlimit` | `5` / `10` / `25` / `50` / `100` / **All**; default **All** (`0`). A numeric limit shows a "Show all" toggle in the block; All caps internally at 5000. |
+| Show "View full report" link | `config_showfull` | On by default. Turn off to hide the full-report link (which is not course-scoped) and keep viewers in the block's course-scoped view. |
 | Custom block title | `config_title` | Overrides the report name |
 
 Multiple instances are allowed per page (`instance_allow_multiple()`), so you can pin several
@@ -89,7 +100,8 @@ version.php               Version, requires, dependency on report_sql
 
 PHPUnit smoke tests in `tests/block_test.php` cover: class load + applicable formats, the
 editing-teacher capability default, the published-report picker feed, table rendering + footer
-link, chart mode emitting the Expand trigger, and empty content when unconfigured.
+link, chart mode emitting the Expand trigger, the row-count + "Show all"/"Show fewer" toggle, and
+empty content when unconfigured.
 
 ```bash
 vendor/bin/phpunit blocks/sqlreports/tests/block_test.php
