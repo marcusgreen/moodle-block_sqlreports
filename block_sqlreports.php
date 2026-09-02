@@ -140,7 +140,7 @@ class block_sqlreports extends block_base {
         // SITEID, which is not a real course scope — pass 0 so the page-course filter is skipped
         // and the viewer sees all rows their other filters/audience allow.
         $pagecourseid = (int) $this->page->course->id;
-        if ($pagecourseid === SITEID) {
+        if ($pagecourseid === (int) SITEID) {
             $pagecourseid = 0;
         }
 
