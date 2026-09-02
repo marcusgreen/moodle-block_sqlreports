@@ -158,10 +158,18 @@ class block_sqlreports extends block_base {
         $mode      = $this->config->displaymode ?? 'auto';
         $ischart   = $rows && ($mode === 'chart' || ($mode === 'auto' && $haschart));
 
+        // Columns the instance is configured to hide, plus — when the page-course filter actually
+        // applied (course page, not Dashboard) — the page-course column itself, which is constant
+        // across every row here and so is pure noise in a block.
+        $hide = (array) ($this->config->hidecolumns ?? []);
+        if ($pagecourseid > 0 && ($pc = $query->pagecoursecolumn()) !== '') {
+            $hide[] = $pc;
+        }
+
         if ($ischart) {
             $this->content->text = $this->render_chart($rows, $chartmeta, $query);
         } else {
-            $this->content->text = $this->render_table($rows, $query);
+            $this->content->text = $this->render_table($rows, $query, $hide);
         }
 
         $this->content->footer = $this->build_footer($rec, $rows, $total, $expanded, $fetchlimit, $ischart);
@@ -233,12 +241,14 @@ class block_sqlreports extends block_base {
      * Render the rows as a simple table.
      *
      * @param array<int, array<string, mixed>> $rows
+     * @param \report_sql\local\query $query
+     * @param string[] $hide Output column names to omit from display.
      * @return string
      */
-    protected function render_table(array $rows, \report_sql\local\query $query): string {
+    protected function render_table(array $rows, \report_sql\local\query $query, array $hide = []): string {
         // Delegate to the shared inline renderer so the block table matches the filter embed and the
         // RB data report (same %%TIMESTAMP() date formatting, %%CASE() text-case, new-tab link fix).
-        return \report_sql\output\embed_renderer::render_table($query, $rows);
+        return \report_sql\output\embed_renderer::render_table($query, $rows, $hide);
     }
 
     /**

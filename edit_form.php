@@ -70,6 +70,36 @@ class block_sqlreports_edit_form extends block_edit_form {
         $mform->setDefault('config_showfull', 0);
         $mform->addHelpButton('config_showfull', 'showfull', 'block_sqlreports');
 
+        // Columns to hide from the rendered table. Options come from the currently-bound query, so
+        // the report must be chosen and saved once before its columns can be picked.
+        $queryid = (int) ($this->block->config->queryid ?? 0);
+        $cols = [];
+        if ($queryid) {
+            try {
+                $cols = array_keys(query::get($queryid)->columns_meta());
+            } catch (\Throwable $e) {
+                $cols = [];
+            }
+        }
+        if ($cols) {
+            $sel = $mform->addElement(
+                'select',
+                'config_hidecolumns',
+                get_string('hidecolumns', 'block_sqlreports'),
+                array_combine($cols, $cols)
+            );
+            $sel->setMultiple(true);
+            $mform->setType('config_hidecolumns', PARAM_TEXT);
+            $mform->addHelpButton('config_hidecolumns', 'hidecolumns', 'block_sqlreports');
+        } else {
+            $mform->addElement(
+                'static',
+                'hidecolumnsnote',
+                get_string('hidecolumns', 'block_sqlreports'),
+                get_string($queryid ? 'hidecolumnsnone' : 'hidecolumnspickfirst', 'block_sqlreports')
+            );
+        }
+
         $mform->addElement('text', 'config_title', get_string('blocktitle', 'block_sqlreports'));
         $mform->setType('config_title', PARAM_TEXT);
     }
