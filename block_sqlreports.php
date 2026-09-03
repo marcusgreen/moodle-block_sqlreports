@@ -30,7 +30,6 @@ use report_sql\local\query;
  * path, so one shared block instance shows each viewer only their own rows.
  */
 class block_sqlreports extends block_base {
-
     /**
      * Set the default block title.
      */
@@ -110,6 +109,13 @@ class block_sqlreports extends block_base {
             return $this->content;
         }
 
+        // Per-instance role gate: if roles are configured, only viewers holding one of them (in this
+        // block's context or a parent) see the block. Empty config = no restriction. This narrows
+        // visibility on top of the report's own access below — it never widens it.
+        if (!$this->user_has_display_role()) {
+            return $this->content;
+        }
+
         try {
             $query = query::get($queryid);
         } catch (\dml_missing_record_exception $e) {
@@ -126,7 +132,7 @@ class block_sqlreports extends block_base {
         // Configured row limit: one of 5/10/25/50/100, or 0 = All (fetch caps internally at 5000).
         $configlimit = (int) ($this->config->rowlimit ?? 0);
 
-        // "Show all" toggle: a viewer can expand this block instance to the full set without leaving
+        // Show-all toggle: a viewer can expand this block instance to the full set without leaving
         // the page (so the page-course scope below is preserved). The link carries this block's id so
         // multiple SQL report blocks on one page expand independently.
         $blockid  = isset($this->instance->id) ? (int) $this->instance->id : 0;
@@ -166,15 +172,56 @@ class block_sqlreports extends block_base {
             $hide[] = $pc;
         }
 
+        // Table rendering is delegated to core Report Builder's own output pipeline (mirrors
+        // block_rbreport) whenever the query is published to a bound RB report. This keeps the block
+        // table pixel-identical to /reportbuilder/view.php and inherits RB's paging. Charts keep the
+        // plugin's server-side SVG path. A privileged viewer looking at an unpublished query has no
+        // bound reportid, so fall back to the legacy inline renderer.
+        $reportid = $query->reportid();
+        $rbtable  = false;
         if ($ischart) {
             $this->content->text = $this->render_chart($rows, $chartmeta, $query);
+        } else if ($reportid) {
+            $this->content->text = $this->render_report_table($query, $reportid, $pagecourseid);
+            $rbtable = true;
         } else {
             $this->content->text = $this->render_table($rows, $query, $hide);
         }
 
-        $this->content->footer = $this->build_footer($rec, $rows, $total, $expanded, $fetchlimit, $ischart);
+        $this->content->footer = $this->build_footer($rec, $rows, $total, $expanded, $fetchlimit, $ischart, $rbtable);
 
         return $this->content;
+    }
+
+    /**
+     * Whether the current viewer may see this block under its per-instance role restriction.
+     *
+     * Empty config (no roles chosen) means no restriction. Otherwise the viewer must hold one of
+     * the configured roles in this block's context or a parent context. Site administrators always
+     * pass, so an admin cannot accidentally hide the block from themselves by choosing roles they
+     * do not hold.
+     *
+     * @return bool
+     */
+    protected function user_has_display_role(): bool {
+        global $USER;
+
+        $wanted = array_filter(array_map('intval', (array) ($this->config->roles ?? [])));
+        if (!$wanted) {
+            return true;
+        }
+        if (is_siteadmin()) {
+            return true;
+        }
+
+        // The get_user_roles() call walks up the context tree, so a course-level role (e.g. Teacher) is
+        // honoured for a block placed inside that course.
+        foreach (get_user_roles($this->context, $USER->id, true) as $ra) {
+            if (in_array((int) $ra->roleid, $wanted, true)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -192,20 +239,32 @@ class block_sqlreports extends block_base {
      * @param bool $expanded Whether the viewer has expanded this block to the full set.
      * @param int $fetchlimit Effective fetch limit used (0 = all).
      * @param bool $ischart Whether the block rendered a chart (suppresses the paging toggle).
+     * @param bool $rbtable Whether the table was rendered by Report Builder (which pages itself, so
+     *                      the block's own Show all / Show fewer toggle and partial "N of M" count
+     *                      are suppressed in favour of a plain total).
      * @return string Footer HTML.
      */
-    protected function build_footer(\stdClass $rec, array $rows, int $total, bool $expanded,
-            int $fetchlimit, bool $ischart): string {
+    protected function build_footer(
+        \stdClass $rec,
+        array $rows,
+        int $total,
+        bool $expanded,
+        int $fetchlimit,
+        bool $ischart,
+        bool $rbtable = false
+    ): string {
         $shown = count($rows);
 
         // Accurate label: "Showing N of M" while limited, plain "M rows" when everything is shown.
-        $countstr = ($shown < $total)
+        // Report Builder pages the table itself, so $rows here does not reflect what it displays;
+        // show the plain total instead of a misleading partial count.
+        $countstr = (!$rbtable && $shown < $total)
             ? get_string('rowcountpartial', 'block_sqlreports', (object) ['shown' => $shown, 'total' => $total])
             : get_string('rowcount', 'block_sqlreports', $total);
         $footer = html_writer::div($countstr, 'sqlreports-rowcount');
 
-        // Show all / Show fewer toggle (table view only).
-        if (!$ischart) {
+        // Show all / Show fewer toggle (legacy inline table view only; RB provides its own pager).
+        if (!$ischart && !$rbtable) {
             $url = new moodle_url($this->page->url);
             if ($expanded) {
                 // Only worth a "Show fewer" when a smaller configured limit exists to return to.
@@ -252,6 +311,66 @@ class block_sqlreports extends block_base {
     }
 
     /**
+     * Render the table through core Report Builder's own output pipeline, exactly as block_rbreport
+     * surfaces a custom report: build the report from its persistent id, export it for the standard
+     * core_reportbuilder/report template and emit that markup. The report's data source already
+     * applies the per-user (useridcolumn) and teacher-course row scoping as base conditions, so no
+     * rows the standalone RB report would hide can leak here.
+     *
+     * The one scope the RB report does not carry is the block-only page-course filter: on a course
+     * page the block limits rows to that course. It is reinstated here as an extra base condition on
+     * the report's main table before rendering, so course-page scoping survives the switch to RB
+     * output. A configured page-course column that is somehow absent from the view fails closed
+     * (no rows) rather than widening what the viewer sees.
+     *
+     * @param \report_sql\local\query $query The bound query (for the page-course column).
+     * @param int $reportid The bound Report Builder report id.
+     * @param int $pagecourseid Host page course id, or 0 to skip page-course scoping.
+     * @return string Report Builder report markup.
+     */
+    protected function render_report_table(\report_sql\local\query $query, int $reportid, int $pagecourseid): string {
+        try {
+            $report = \core_reportbuilder\manager::get_report_from_id($reportid);
+        } catch (\moodle_exception $e) {
+            // Bound report vanished or is inaccessible: show a neutral message, never raw rows.
+            return get_string('errdata', 'block_sqlreports');
+        }
+
+        // Map the block's configured row limit onto RB's own per-page paging (0 = All → RB default).
+        $configlimit = (int) ($this->config->rowlimit ?? 0);
+        if ($configlimit > 0) {
+            $report->set_default_per_page($configlimit);
+        }
+
+        // Force the RB card/table layout from the instance config (mirrors block_rbreport). Adaptive
+        // adds no attribute, leaving Report Builder to switch on the available block width.
+        $layout = $this->config->layout ?? \block_sqlreports\constants::LAYOUT_ADAPTIVE;
+        if ($layout === \block_sqlreports\constants::LAYOUT_CARDS) {
+            $report->add_attributes(['data-force-card' => '']);
+        } else if ($layout === \block_sqlreports\constants::LAYOUT_TABLE) {
+            $report->add_attributes(['data-force-table' => '']);
+        }
+
+        // Reinstate the block-only page-course scoping as an extra base condition.
+        if ($pagecourseid > 0 && ($pagecol = $query->pagecoursecolumn()) !== '') {
+            $alias = $report->get_main_table_alias();
+            if (array_key_exists($pagecol, $query->columns_meta())) {
+                $param = \core_reportbuilder\local\helpers\database::generate_param_name();
+                $report->add_base_condition_sql("{$alias}.{$pagecol} = :{$param}", [$param => $pagecourseid]);
+            } else {
+                // Configured page-course column missing from the view: fail closed.
+                $report->add_base_condition_sql('1 = 0');
+            }
+        }
+
+        $outputpage = new \core_reportbuilder\output\custom_report($report->get_report_persistent(), false);
+        $output     = $this->page->get_renderer('core_reportbuilder');
+        $export     = $outputpage->export_for_template($output);
+
+        return html_writer::div($output->render_from_template('core_reportbuilder/report', $export));
+    }
+
+    /**
      * Render the rows as a chart, using the report's saved chart config.
      *
      * @param array<int, array<string, mixed>> $rows
@@ -270,7 +389,12 @@ class block_sqlreports extends block_base {
         // report — the transform is display-only (the stored value is raw), so the block must apply
         // it too or its labels differ from every other surface.
         [$labels, $values] = \report_sql\local\chart_presenter::chart_series(
-            $rows, $xcol, $ycol, $query->column_textcase($xcol), $query->column_dateformat($xcol));
+            $rows,
+            $xcol,
+            $ycol,
+            $query->column_textcase($xcol),
+            $query->column_dateformat($xcol)
+        );
         $type = (string) $chartmeta['type'];
 
         // Category/legend label font size, saved with the chart config. Clamped to the same range as

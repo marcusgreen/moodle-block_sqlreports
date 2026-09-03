@@ -14,23 +14,22 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
+namespace block_sqlreports;
+
 /**
- * Block that surfaces a report_sql report (table or chart) inline on a page.
+ * Shared constant values for block_sqlreports.
  *
  * @package   block_sqlreports
  * @copyright 2026 Marcus Green
  * @license   https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+class constants {
+    /** Let Report Builder decide: cards in a narrow block, table when there is room. */
+    const LAYOUT_ADAPTIVE = 'adaptive';
 
-defined('MOODLE_INTERNAL') || die();
+    /** Always render the Report Builder table as cards. */
+    const LAYOUT_CARDS = 'cards';
 
-$plugin->component    = 'block_sqlreports';
-$plugin->release      = '0.2.0';
-$plugin->version      = 2026090301;
-$plugin->requires     = 2024100100; // Moodle 4.5+ for stable Reportbuilder API.
-$plugin->maturity     = MATURITY_ALPHA;
-$plugin->supported    = [405, 502];
-$plugin->dependencies = [
-    // See https://github.com/marcusgreen/report_sql — chart_svg server-side SVG renderer.
-    'report_sql' => 2026080300,
-];
+    /** Always render the Report Builder table as a table. */
+    const LAYOUT_TABLE = 'table';
+}

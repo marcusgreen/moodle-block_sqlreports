@@ -22,13 +22,13 @@
  * @license   https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+use block_sqlreports\constants;
 use report_sql\local\query;
 
 /**
  * Per-instance settings: which report to show, how to render it, and how many rows.
  */
 class block_sqlreports_edit_form extends block_edit_form {
-
     /**
      * Define the block-specific config fields.
      *
@@ -49,6 +49,18 @@ class block_sqlreports_edit_form extends block_edit_form {
         ]);
         $mform->setType('config_displaymode', PARAM_ALPHA);
         $mform->setDefault('config_displaymode', 'auto');
+
+        // Table layout, applied only to the Report Builder table view (mirrors block_rbreport): force
+        // cards, force a table, or let Report Builder adapt to the block width. Ignored for charts.
+        $mform->addElement('select', 'config_layout', get_string('configlayout', 'block_sqlreports'), [
+            constants::LAYOUT_ADAPTIVE => get_string('displayadaptive', 'block_sqlreports'),
+            constants::LAYOUT_CARDS    => get_string('displayascards', 'block_sqlreports'),
+            constants::LAYOUT_TABLE    => get_string('displayastable', 'block_sqlreports'),
+        ]);
+        $mform->setType('config_layout', PARAM_ALPHA);
+        $mform->setDefault('config_layout', constants::LAYOUT_ADAPTIVE);
+        $mform->addHelpButton('config_layout', 'configlayout', 'block_sqlreports');
+        $mform->hideIf('config_layout', 'config_displaymode', 'eq', 'chart');
 
         // 0 = All (fetch caps internally at 5000). Named options keep the block's initial render small
         // while letting a viewer expand via the "Show all" toggle in the block itself.
@@ -99,6 +111,22 @@ class block_sqlreports_edit_form extends block_edit_form {
                 get_string($queryid ? 'hidecolumnsnone' : 'hidecolumnspickfirst', 'block_sqlreports')
             );
         }
+
+        // Restrict who sees the block by role. Empty = no restriction (everyone who can already view
+        // the report). Only narrows visibility; never widens the report's own per-viewer access.
+        $roleopts = [];
+        foreach (role_fix_names(get_all_roles(), $this->page->context, ROLENAME_ALIAS) as $role) {
+            $roleopts[$role->id] = $role->localname;
+        }
+        $rolesel = $mform->addElement(
+            'select',
+            'config_roles',
+            get_string('roles', 'block_sqlreports'),
+            $roleopts
+        );
+        $rolesel->setMultiple(true);
+        $mform->setType('config_roles', PARAM_INT);
+        $mform->addHelpButton('config_roles', 'roles', 'block_sqlreports');
 
         $mform->addElement('text', 'config_title', get_string('blocktitle', 'block_sqlreports'));
         $mform->setType('config_title', PARAM_TEXT);
