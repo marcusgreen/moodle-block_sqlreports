@@ -11,15 +11,19 @@ jobs:
     runs-on: ubuntu-latest
 
     services:
-      postgres:
-        image: postgres:14
+      # report_sql (hard dependency) uses MySQL-only SQL (DATABASE()) when enumerating its views,
+      # so the block's test suite only runs against MariaDB/MySQL, not PostgreSQL.
+      mariadb:
+        image: mariadb:10.11
         env:
-          POSTGRES_USER: postgres
-          POSTGRES_HOST_AUTH_METHOD: trust
+          MYSQL_USER: root
+          MYSQL_ALLOW_EMPTY_PASSWORD: true
+          MYSQL_CHARACTER_SET_SERVER: utf8mb4
+          MYSQL_COLLATION_SERVER: utf8mb4_unicode_ci
         ports:
-          - 5432:5432
+          - 3306:3306
         options: >-
-          --health-cmd="pg_isready"
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=3
@@ -66,7 +70,7 @@ jobs:
       - name: Install Moodle + plugin
         run: moodle-plugin-ci install --plugin ./plugin --extra-plugins ./extra --db-host=127.0.0.1
         env:
-          DB: pgsql
+          DB: mariadb
           MOODLE_BRANCH: ${{ matrix.moodle-branch }}
 
       - name: PHP Lint
