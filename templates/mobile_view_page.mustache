@@ -29,6 +29,25 @@
     * rowcount - Row-count label (empty when no rows).
     * fullurl - URL of the full report (empty when none).
     * viewfull - "View full report" link label.
+
+    Example context (json):
+    {
+        "title": "Active users",
+        "hasrows": true,
+        "headers": [
+            { "label": "Name" },
+            { "label": "Logins" }
+        ],
+        "rows": [
+            { "cells": [ { "value": "Alice" }, { "value": "42" } ] },
+            { "cells": [ { "value": "Bob" }, { "value": "17" } ] }
+        ],
+        "norows": "No data to display.",
+        "error": "",
+        "rowcount": "2 rows",
+        "fullurl": "https://example.com/reportbuilder/view.php?id=1",
+        "viewfull": "View full report"
+    }
 }}
 {{=<% %>=}}
 <div class="ion-padding">
