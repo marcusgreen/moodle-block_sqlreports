@@ -234,7 +234,7 @@ class block_sqlreports extends block_base {
      * meaningless.
      *
      * @param \stdClass $rec Query record (for reportid).
-     * @param array<int, array<string, mixed>> $rows The rows actually rendered.
+     * @param array $rows The rows actually rendered.
      * @param int $total Total rows the viewer may see (accurate, un-capped count).
      * @param bool $expanded Whether the viewer has expanded this block to the full set.
      * @param int $fetchlimit Effective fetch limit used (0 = all).
@@ -299,7 +299,7 @@ class block_sqlreports extends block_base {
     /**
      * Render the rows as a simple table.
      *
-     * @param array<int, array<string, mixed>> $rows
+     * @param array $rows
      * @param \report_sql\local\query $query
      * @param string[] $hide Output column names to omit from display.
      * @return string
@@ -373,8 +373,8 @@ class block_sqlreports extends block_base {
     /**
      * Render the rows as a chart, using the report's saved chart config.
      *
-     * @param array<int, array<string, mixed>> $rows
-     * @param array<string, mixed> $chartmeta
+     * @param array $rows
+     * @param array $chartmeta
      * @param \report_sql\local\query $query The bound query (for %%CASE%% display transforms).
      * @return string
      */
