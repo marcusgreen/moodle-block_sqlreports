@@ -29,6 +29,26 @@ use report_sql\local\query;
  * @covers    \block_sqlreports
  */
 final class block_test extends \advanced_testcase {
+    /**
+     * Build a standalone page for a block instance under test.
+     *
+     * Blocks may not use the global $PAGE (moodle.PHP.ForbiddenGlobalUse); a fresh page in the system
+     * context gives get_content() a URL and a Report Builder renderer without touching the global.
+     *
+     * @return \moodle_page
+     */
+    private function make_page(): \moodle_page {
+        $page = new \moodle_page();
+        $page->set_context(\context_system::instance());
+        $page->set_url('/');
+        // Report Builder output reads the request page's URL; give the framework page one too so
+        // rendering does not emit a "page did not call set_url()" debugging notice. Accessed via
+        // $GLOBALS as blocks may not declare `global $PAGE` (moodle.PHP.ForbiddenGlobalUse).
+        if (!$GLOBALS['PAGE']->has_set_url()) {
+            $GLOBALS['PAGE']->set_url('/');
+        }
+        return $page;
+    }
 
     /**
      * Drop any VIEWs left by publish() before the framework reset (which DROP TABLEs a VIEW errors on).
@@ -79,7 +99,7 @@ final class block_test extends \advanced_testcase {
     }
 
     public function test_capabilities_allow_editingteacher_to_add(): void {
-        // db/access.php grants addinstance to the editingteacher archetype.
+        // The db/access.php file grants addinstance to the editingteacher archetype.
         $caps = get_default_capabilities('editingteacher');
         $this->assertArrayHasKey('block/sqlreports:addinstance', $caps);
         $this->assertSame((string) CAP_ALLOW, (string) $caps['block/sqlreports:addinstance']);
@@ -96,7 +116,7 @@ final class block_test extends \advanced_testcase {
     }
 
     public function test_get_content_renders_table_and_footer_link(): void {
-        global $CFG, $PAGE;
+        global $CFG;
         require_once($CFG->dirroot . '/blocks/moodleblock.class.php');
         require_once($CFG->dirroot . '/blocks/sqlreports/block_sqlreports.php');
 
@@ -109,10 +129,9 @@ final class block_test extends \advanced_testcase {
 
         $block = new \block_sqlreports();
         $block->init();
-        // showfull is off by default; opt in so the footer link is present to assert on.
+        // The showfull option is off by default; opt in so the footer link is present to assert on.
         $block->config = (object) ['queryid' => $id, 'displaymode' => 'table', 'rowlimit' => 5, 'showfull' => 1];
-        $PAGE->set_url('/');
-        $block->page = $PAGE;
+        $block->page = $this->make_page();
 
         $content = $block->get_content();
         $this->assertNotNull($content);
@@ -122,7 +141,7 @@ final class block_test extends \advanced_testcase {
     }
 
     public function test_get_content_chart_mode_includes_popout(): void {
-        global $CFG, $PAGE;
+        global $CFG;
         require_once($CFG->dirroot . '/blocks/moodleblock.class.php');
         require_once($CFG->dirroot . '/blocks/sqlreports/block_sqlreports.php');
 
@@ -141,8 +160,7 @@ final class block_test extends \advanced_testcase {
         $block = new \block_sqlreports();
         $block->init();
         $block->config = (object) ['queryid' => $id, 'displaymode' => 'chart', 'rowlimit' => 5];
-        $PAGE->set_url('/');
-        $block->page = $PAGE;
+        $block->page = $this->make_page();
 
         $content = $block->get_content();
         $this->assertStringContainsString(get_string('expandchart', 'block_sqlreports'), $content->text);
@@ -153,7 +171,7 @@ final class block_test extends \advanced_testcase {
     }
 
     public function test_get_content_chart_honours_saved_labelsize(): void {
-        global $CFG, $PAGE;
+        global $CFG;
         require_once($CFG->dirroot . '/blocks/moodleblock.class.php');
         require_once($CFG->dirroot . '/blocks/sqlreports/block_sqlreports.php');
 
@@ -174,8 +192,7 @@ final class block_test extends \advanced_testcase {
         $block = new \block_sqlreports();
         $block->init();
         $block->config = (object) ['queryid' => $id, 'displaymode' => 'chart', 'rowlimit' => 5];
-        $PAGE->set_url('/');
-        $block->page = $PAGE;
+        $block->page = $this->make_page();
 
         $content = $block->get_content();
 
@@ -191,7 +208,7 @@ final class block_test extends \advanced_testcase {
     }
 
     public function test_get_content_chart_labels_apply_textcase(): void {
-        global $CFG, $PAGE;
+        global $CFG;
         require_once($CFG->dirroot . '/blocks/moodleblock.class.php');
         require_once($CFG->dirroot . '/blocks/sqlreports/block_sqlreports.php');
 
@@ -216,8 +233,7 @@ final class block_test extends \advanced_testcase {
         $block = new \block_sqlreports();
         $block->init();
         $block->config = (object) ['queryid' => $id, 'displaymode' => 'chart', 'rowlimit' => 5];
-        $PAGE->set_url('/');
-        $block->page = $PAGE;
+        $block->page = $this->make_page();
 
         $content = $block->get_content();
 
@@ -230,7 +246,7 @@ final class block_test extends \advanced_testcase {
     }
 
     public function test_get_content_table_applies_column_transforms(): void {
-        global $CFG, $PAGE;
+        global $CFG;
         require_once($CFG->dirroot . '/blocks/moodleblock.class.php');
         require_once($CFG->dirroot . '/blocks/sqlreports/block_sqlreports.php');
 
@@ -257,21 +273,20 @@ final class block_test extends \advanced_testcase {
         $block = new \block_sqlreports();
         $block->init();
         $block->config = (object) ['queryid' => $id, 'displaymode' => 'table', 'rowlimit' => 5];
-        $PAGE->set_url('/');
-        $block->page = $PAGE;
+        $block->page = $this->make_page();
 
         $html = $block->get_content()->text;
 
-        // %%CASE(upper)%%: raw "zeta_user" rendered upper-cased, not raw.
+        // The %%CASE(upper)%% column: raw "zeta_user" rendered upper-cased, not raw.
         $this->assertStringContainsString('ZETA_USER', $html);
         $this->assertStringNotContainsString('zeta_user', $html);
-        // %%TIMESTAMP(..., dd/mm/yyyy)%%: epoch formatted as a date, not the bare integer.
+        // The %%TIMESTAMP(..., dd/mm/yyyy)%% column: epoch formatted as a date, not the bare integer.
         $this->assertStringContainsString(userdate($epoch, '%d/%m/%Y', 99, false), $html);
         $this->assertStringNotContainsString((string) $epoch, $html);
     }
 
     public function test_get_content_full_report_link_off_by_default(): void {
-        global $CFG, $PAGE;
+        global $CFG;
         require_once($CFG->dirroot . '/blocks/moodleblock.class.php');
         require_once($CFG->dirroot . '/blocks/sqlreports/block_sqlreports.php');
 
@@ -285,14 +300,13 @@ final class block_test extends \advanced_testcase {
         $block->init();
         // No showfull key: defaults to off, so the full-report link must not appear.
         $block->config = (object) ['queryid' => $id, 'displaymode' => 'table', 'rowlimit' => 5];
-        $PAGE->set_url('/');
-        $block->page = $PAGE;
+        $block->page = $this->make_page();
 
         $this->assertStringNotContainsString('/reportbuilder/view.php', $block->get_content()->footer);
     }
 
     public function test_get_content_published_report_pages_via_report_builder(): void {
-        global $CFG, $PAGE;
+        global $CFG;
         require_once($CFG->dirroot . '/blocks/moodleblock.class.php');
         require_once($CFG->dirroot . '/blocks/sqlreports/block_sqlreports.php');
 
@@ -315,8 +329,7 @@ final class block_test extends \advanced_testcase {
         $block->init();
         $block->config   = (object) ['queryid' => $id, 'displaymode' => 'table', 'rowlimit' => 5];
         $block->instance = (object) ['id' => 4242];
-        $PAGE->set_url('/');
-        $block->page = $PAGE;
+        $block->page = $this->make_page();
 
         $footer = $block->get_content()->footer;
         $this->assertStringContainsString(get_string('rowcount', 'block_sqlreports', $total), $footer);
@@ -333,7 +346,7 @@ final class block_test extends \advanced_testcase {
      * @return \block_sqlreports
      */
     private function role_gated_block(int $queryid, \context $context, array $roles): \block_sqlreports {
-        global $CFG, $PAGE;
+        global $CFG;
         require_once($CFG->dirroot . '/blocks/moodleblock.class.php');
         require_once($CFG->dirroot . '/blocks/sqlreports/block_sqlreports.php');
 
@@ -342,8 +355,7 @@ final class block_test extends \advanced_testcase {
         $block->config  = (object) ['queryid' => $queryid, 'displaymode' => 'table', 'rowlimit' => 5,
             'roles' => $roles];
         $block->context = $context;
-        $PAGE->set_url('/');
-        $block->page = $PAGE;
+        $block->page = $this->make_page();
         return $block;
     }
 
@@ -424,7 +436,7 @@ final class block_test extends \advanced_testcase {
     }
 
     public function test_get_content_empty_when_unconfigured_and_not_editing(): void {
-        global $CFG, $PAGE;
+        global $CFG;
         require_once($CFG->dirroot . '/blocks/moodleblock.class.php');
         require_once($CFG->dirroot . '/blocks/sqlreports/block_sqlreports.php');
 
@@ -434,8 +446,7 @@ final class block_test extends \advanced_testcase {
         $block = new \block_sqlreports();
         $block->init();
         $block->config = new \stdClass();
-        $PAGE->set_url('/');
-        $block->page = $PAGE;
+        $block->page = $this->make_page();
 
         $content = $block->get_content();
         $this->assertSame('', $content->text);
