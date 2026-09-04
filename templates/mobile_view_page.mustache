@@ -26,6 +26,7 @@
     * rows - Array of { cells: [ { value } ] } data rows.
     * norows - "No data" message.
     * error - Non-empty when the report could not be displayed.
+    * rowcount - Row-count label (empty when no rows).
     * fullurl - URL of the full report (empty when none).
     * viewfull - "View full report" link label.
 }}
@@ -58,6 +59,11 @@
         <%^hasrows%>
             <core-empty-box icon="fas-table" message="<% norows %>"></core-empty-box>
         <%/hasrows%>
+        <%#rowcount%>
+            <ion-item lines="none">
+                <ion-note slot="end"><% rowcount %></ion-note>
+            </ion-item>
+        <%/rowcount%>
         <%#fullurl%>
             <ion-item href="<% fullurl %>" core-link detail="true">
                 <ion-label><% viewfull %></ion-label>

@@ -109,7 +109,8 @@ final class block_test extends \advanced_testcase {
 
         $block = new \block_sqlreports();
         $block->init();
-        $block->config = (object) ['queryid' => $id, 'displaymode' => 'table', 'rowlimit' => 5];
+        // showfull is off by default; opt in so the footer link is present to assert on.
+        $block->config = (object) ['queryid' => $id, 'displaymode' => 'table', 'rowlimit' => 5, 'showfull' => 1];
         $PAGE->set_url('/');
         $block->page = $PAGE;
 
@@ -267,6 +268,170 @@ final class block_test extends \advanced_testcase {
         // %%TIMESTAMP(..., dd/mm/yyyy)%%: epoch formatted as a date, not the bare integer.
         $this->assertStringContainsString(userdate($epoch, '%d/%m/%Y', 99, false), $html);
         $this->assertStringNotContainsString((string) $epoch, $html);
+    }
+
+    public function test_get_content_full_report_link_off_by_default(): void {
+        global $CFG, $PAGE;
+        require_once($CFG->dirroot . '/blocks/moodleblock.class.php');
+        require_once($CFG->dirroot . '/blocks/sqlreports/block_sqlreports.php');
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $id = query::save($this->formdata(['querysql' => 'SELECT id, username FROM {user}']));
+        query::get($id)->publish();
+
+        $block = new \block_sqlreports();
+        $block->init();
+        // No showfull key: defaults to off, so the full-report link must not appear.
+        $block->config = (object) ['queryid' => $id, 'displaymode' => 'table', 'rowlimit' => 5];
+        $PAGE->set_url('/');
+        $block->page = $PAGE;
+
+        $this->assertStringNotContainsString('/reportbuilder/view.php', $block->get_content()->footer);
+    }
+
+    public function test_get_content_show_all_toggle(): void {
+        global $CFG, $PAGE;
+        require_once($CFG->dirroot . '/blocks/moodleblock.class.php');
+        require_once($CFG->dirroot . '/blocks/sqlreports/block_sqlreports.php');
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $gen = $this->getDataGenerator();
+        for ($i = 0; $i < 12; $i++) {
+            $gen->create_user();
+        }
+        $total = (int) $GLOBALS['DB']->count_records('user', ['deleted' => 0]);
+
+        $id = query::save($this->formdata(['querysql' => 'SELECT id, username FROM {user}']));
+        query::get($id)->publish();
+
+        // Capped to 5: footer shows "Showing 5 of N" plus a Show all link carrying this block's id.
+        $block = new \block_sqlreports();
+        $block->init();
+        $block->config   = (object) ['queryid' => $id, 'displaymode' => 'table', 'rowlimit' => 5];
+        $block->instance = (object) ['id' => 4242];
+        $PAGE->set_url('/');
+        $block->page = $PAGE;
+
+        $footer = $block->get_content()->footer;
+        $this->assertStringContainsString(get_string('rowcountpartial', 'block_sqlreports',
+            (object) ['shown' => 5, 'total' => $total]), $footer);
+        $this->assertStringContainsString('sqlreportsall=4242', $footer);
+
+        // With the expand param set for this block, every row is shown and a Show fewer link appears.
+        $_GET['sqlreportsall'] = 4242;
+        $expandedblock = new \block_sqlreports();
+        $expandedblock->init();
+        $expandedblock->config   = (object) ['queryid' => $id, 'displaymode' => 'table', 'rowlimit' => 5];
+        $expandedblock->instance = (object) ['id' => 4242];
+        $expandedblock->page = $PAGE;
+
+        $expandedfooter = $expandedblock->get_content()->footer;
+        $this->assertStringContainsString(get_string('rowcount', 'block_sqlreports', $total), $expandedfooter);
+        $this->assertStringContainsString(get_string('showfewer', 'block_sqlreports'), $expandedfooter);
+        unset($_GET['sqlreportsall']);
+    }
+
+    /**
+     * Build a configured block bound to a course context, ready for a role-gate assertion.
+     *
+     * @param int $queryid Published query id.
+     * @param \context $context Block instance context.
+     * @param int[] $roles Configured role ids (empty = no restriction).
+     * @return \block_sqlreports
+     */
+    private function role_gated_block(int $queryid, \context $context, array $roles): \block_sqlreports {
+        global $CFG, $PAGE;
+        require_once($CFG->dirroot . '/blocks/moodleblock.class.php');
+        require_once($CFG->dirroot . '/blocks/sqlreports/block_sqlreports.php');
+
+        $block = new \block_sqlreports();
+        $block->init();
+        $block->config  = (object) ['queryid' => $queryid, 'displaymode' => 'table', 'rowlimit' => 5,
+            'roles' => $roles];
+        $block->context = $context;
+        $PAGE->set_url('/');
+        $block->page = $PAGE;
+        return $block;
+    }
+
+    public function test_role_gate_hides_block_from_non_matching_viewer(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $id = query::save($this->formdata(['querysql' => 'SELECT id, username FROM {user}']));
+        query::get($id)->publish();
+
+        $course  = $this->getDataGenerator()->create_course();
+        $context = \context_course::instance($course->id);
+        $teacher = $DB->get_field('role', 'id', ['shortname' => 'editingteacher'], MUST_EXIST);
+
+        // A student in the course, block restricted to the teacher role → no match → block hidden.
+        $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        $this->setUser($user);
+
+        $block = $this->role_gated_block($id, $context, [(int) $teacher]);
+        $this->assertSame('', $block->get_content()->text);
+    }
+
+    public function test_role_gate_shows_block_to_matching_viewer(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $id = query::save($this->formdata(['querysql' => 'SELECT id, username FROM {user}']));
+        query::get($id)->publish();
+
+        $course  = $this->getDataGenerator()->create_course();
+        $context = \context_course::instance($course->id);
+        $teacher = $DB->get_field('role', 'id', ['shortname' => 'editingteacher'], MUST_EXIST);
+
+        // A teacher in the course, block restricted to the teacher role → match → block shows.
+        $user = $this->getDataGenerator()->create_and_enrol($course, 'editingteacher');
+        $this->setUser($user);
+
+        $block = $this->role_gated_block($id, $context, [(int) $teacher]);
+        $this->assertStringContainsString('<table', $block->get_content()->text);
+    }
+
+    public function test_role_gate_empty_config_shows_to_everyone(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $id = query::save($this->formdata(['querysql' => 'SELECT id, username FROM {user}']));
+        query::get($id)->publish();
+
+        $course  = $this->getDataGenerator()->create_course();
+        $context = \context_course::instance($course->id);
+
+        // No roles configured: a plain student still sees the block.
+        $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        $this->setUser($user);
+
+        $block = $this->role_gated_block($id, $context, []);
+        $this->assertStringContainsString('<table', $block->get_content()->text);
+    }
+
+    public function test_role_gate_admin_bypass(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $id = query::save($this->formdata(['querysql' => 'SELECT id, username FROM {user}']));
+        query::get($id)->publish();
+
+        $course  = \context_course::instance($this->getDataGenerator()->create_course()->id);
+        $teacher = $DB->get_field('role', 'id', ['shortname' => 'editingteacher'], MUST_EXIST);
+
+        // Admin holds no course role, yet the block restricted to teacher is still shown to them.
+        $this->setAdminUser();
+        $block = $this->role_gated_block($id, $course, [(int) $teacher]);
+        $this->assertStringContainsString('<table', $block->get_content()->text);
     }
 
     public function test_get_content_empty_when_unconfigured_and_not_editing(): void {

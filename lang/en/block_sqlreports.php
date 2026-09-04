@@ -26,13 +26,22 @@ defined('MOODLE_INTERNAL') || die();
 
 $string['blocktitle'] = 'Custom block title';
 $string['choosereport'] = 'Choose a report…';
+$string['configlayout'] = 'Table layout';
+$string['configlayout_help'] = 'How the table view is laid out. Only affects the table (not charts).
+
+**Adaptive:** Report Builder shows cards in a narrow block and a table when there is room.
+**Cards:** Always show cards.
+**Table:** Always show a table.';
+$string['displayadaptive'] = 'Adaptive';
+$string['displayascards'] = 'Cards';
+$string['displayastable'] = 'Table';
 $string['displaymode'] = 'Display as';
 $string['download'] = 'Download';
 $string['downloadpng'] = 'PNG image';
 $string['downloadsvg'] = 'SVG vector';
 $string['errdata'] = 'This report cannot be displayed here.';
-$string['expandchart'] = 'Expand chart';
 $string['exitfullscreen'] = 'Exit fullscreen';
+$string['expandchart'] = 'Expand chart';
 $string['fullscreen'] = 'Fullscreen';
 $string['hidecolumns'] = 'Hide columns';
 $string['hidecolumns_help'] = 'Columns to leave out of this block\'s table. The report still reads the hidden columns (so filtering, links and per-viewer scoping keep working) — they are only removed from what this block displays. Choose the report and save once before its columns appear here.';
@@ -45,8 +54,19 @@ $string['norows'] = 'No data to show.';
 $string['notconfigured'] = 'Edit this block and choose a report to display.';
 $string['pluginname'] = 'SQL report';
 $string['report'] = 'Report';
-$string['report_help'] = 'The published report to show in this block. Only published reports are listed. Each viewer still sees only the rows the report itself allows them to see (for example, only the courses they teach).';
+$string['report_help'] = 'The published report to show in this block. Only published reports are listed. Each viewer still sees only the rows the report itself allows them to see (for example, only the courses they teach). On a course page the block is limited to that course; the "View full report" link opens the complete report without that course limit.';
+$string['roles'] = 'Show only to roles';
+$string['roles_help'] = 'Restrict this block to viewers who hold one of the selected roles in this context (or a parent context). Leave empty to show the block to everyone who can already view the report. This only narrows visibility on top of the report\'s own per-viewer access — it never widens it. Site administrators always see the block regardless of this setting.';
+$string['rowcount'] = '{$a} rows';
+$string['rowcountpartial'] = 'Showing {$a->shown} of {$a->total} rows';
+$string['rowlimit'] = 'Rows to show';
+$string['rowlimit_help'] = 'How many rows to show in the block by default. Choose "All" to show every row (up to a safety cap). When the report has more rows than shown, viewers get a "Show all" link to expand the block in place, keeping the current course scope.';
+$string['rowsall'] = 'All';
+$string['showall'] = 'Show all {$a} rows';
+$string['showfewer'] = 'Show fewer';
+$string['showfull'] = 'Show "View full report" link';
+$string['showfull_help'] = 'When enabled, the block shows a "View full report" link that opens the complete report. On a course page the block itself is limited to that course, but the full report is not. Turn this off to hide the link and keep viewers within the block\'s course-scoped view.';
 $string['sqlreports:addinstance'] = 'Add a new SQL report block';
 $string['sqlreports:myaddinstance'] = 'Add a new SQL report block to the Dashboard';
-$string['rowlimit'] = 'Maximum rows';
 $string['viewfull'] = 'View full report';
+$string['viewfull_title'] = 'Opens the complete report with every row you are allowed to see. Unlike this block, it is not limited to the current course.';
