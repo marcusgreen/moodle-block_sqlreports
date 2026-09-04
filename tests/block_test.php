@@ -335,6 +335,105 @@ final class block_test extends \advanced_testcase {
         unset($_GET['sqlreportsall']);
     }
 
+    /**
+     * Build a configured block bound to a course context, ready for a role-gate assertion.
+     *
+     * @param int $queryid Published query id.
+     * @param \context $context Block instance context.
+     * @param int[] $roles Configured role ids (empty = no restriction).
+     * @return \block_sqlreports
+     */
+    private function role_gated_block(int $queryid, \context $context, array $roles): \block_sqlreports {
+        global $CFG, $PAGE;
+        require_once($CFG->dirroot . '/blocks/moodleblock.class.php');
+        require_once($CFG->dirroot . '/blocks/sqlreports/block_sqlreports.php');
+
+        $block = new \block_sqlreports();
+        $block->init();
+        $block->config  = (object) ['queryid' => $queryid, 'displaymode' => 'table', 'rowlimit' => 5,
+            'roles' => $roles];
+        $block->context = $context;
+        $PAGE->set_url('/');
+        $block->page = $PAGE;
+        return $block;
+    }
+
+    public function test_role_gate_hides_block_from_non_matching_viewer(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $id = query::save($this->formdata(['querysql' => 'SELECT id, username FROM {user}']));
+        query::get($id)->publish();
+
+        $course  = $this->getDataGenerator()->create_course();
+        $context = \context_course::instance($course->id);
+        $teacher = $DB->get_field('role', 'id', ['shortname' => 'editingteacher'], MUST_EXIST);
+
+        // A student in the course, block restricted to the teacher role → no match → block hidden.
+        $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        $this->setUser($user);
+
+        $block = $this->role_gated_block($id, $context, [(int) $teacher]);
+        $this->assertSame('', $block->get_content()->text);
+    }
+
+    public function test_role_gate_shows_block_to_matching_viewer(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $id = query::save($this->formdata(['querysql' => 'SELECT id, username FROM {user}']));
+        query::get($id)->publish();
+
+        $course  = $this->getDataGenerator()->create_course();
+        $context = \context_course::instance($course->id);
+        $teacher = $DB->get_field('role', 'id', ['shortname' => 'editingteacher'], MUST_EXIST);
+
+        // A teacher in the course, block restricted to the teacher role → match → block shows.
+        $user = $this->getDataGenerator()->create_and_enrol($course, 'editingteacher');
+        $this->setUser($user);
+
+        $block = $this->role_gated_block($id, $context, [(int) $teacher]);
+        $this->assertStringContainsString('<table', $block->get_content()->text);
+    }
+
+    public function test_role_gate_empty_config_shows_to_everyone(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $id = query::save($this->formdata(['querysql' => 'SELECT id, username FROM {user}']));
+        query::get($id)->publish();
+
+        $course  = $this->getDataGenerator()->create_course();
+        $context = \context_course::instance($course->id);
+
+        // No roles configured: a plain student still sees the block.
+        $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        $this->setUser($user);
+
+        $block = $this->role_gated_block($id, $context, []);
+        $this->assertStringContainsString('<table', $block->get_content()->text);
+    }
+
+    public function test_role_gate_admin_bypass(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $id = query::save($this->formdata(['querysql' => 'SELECT id, username FROM {user}']));
+        query::get($id)->publish();
+
+        $course  = \context_course::instance($this->getDataGenerator()->create_course()->id);
+        $teacher = $DB->get_field('role', 'id', ['shortname' => 'editingteacher'], MUST_EXIST);
+
+        // Admin holds no course role, yet the block restricted to teacher is still shown to them.
+        $this->setAdminUser();
+        $block = $this->role_gated_block($id, $course, [(int) $teacher]);
+        $this->assertStringContainsString('<table', $block->get_content()->text);
+    }
+
     public function test_get_content_empty_when_unconfigured_and_not_editing(): void {
         global $CFG, $PAGE;
         require_once($CFG->dirroot . '/blocks/moodleblock.class.php');

@@ -44,11 +44,9 @@ class mobile {
         require_once($CFG->libdir . '/blocklib.php');
 
         $args = (object) $args;
-        $blockinstance = block_instance_by_id($args->blockid);
-        $config = $blockinstance->config ?? new \stdClass();
 
         $data = [
-            'title'   => (string) ($blockinstance->title ?? ''),
+            'title'   => '',
             'hasrows' => false,
             'headers' => [],
             'rows'    => [],
@@ -58,6 +56,32 @@ class mobile {
             'fullurl' => '',
             'viewfull' => get_string('viewfull', 'block_sqlreports'),
         ];
+
+        // Load the addressed block, failing closed on a missing/invalid id or a block that is not
+        // one of ours (blockid is untyped web-service input, and block_instance_by_id returns false
+        // when no such block exists).
+        $blockid = (int) ($args->blockid ?? 0);
+        $blockinstance = $blockid ? block_instance_by_id($blockid) : false;
+        if (!$blockinstance || $blockinstance->instance->blockname !== 'sqlreports') {
+            return self::wrap($OUTPUT, $data);
+        }
+
+        // The web block is only ever drawn after core's block manager has checked the viewer can see
+        // this context; the app dispatches straight to us, so re-apply that gate here. Without it a
+        // viewer could pull a block's rows from a context they cannot otherwise reach.
+        if (!has_capability('moodle/block:view', $blockinstance->context)) {
+            return self::wrap($OUTPUT, $data);
+        }
+
+        $config = $blockinstance->config ?? new \stdClass();
+        $data['title'] = (string) ($blockinstance->title ?? '');
+
+        // Honour the block's per-instance role restriction, exactly as the web block does
+        // ({@see \block_sqlreports::user_has_display_role}). The web path applies it; the app must
+        // too, or an admin-configured visibility limit is silently bypassed on mobile.
+        if (!self::user_has_display_role($blockinstance->context, $config)) {
+            return self::wrap($OUTPUT, $data);
+        }
 
         $queryid = (int) ($config->queryid ?? 0);
         if (!$queryid) {
@@ -126,6 +150,37 @@ class mobile {
         }
 
         return self::wrap($OUTPUT, $data);
+    }
+
+    /**
+     * Whether the current viewer passes the block's per-instance role restriction.
+     *
+     * Mirrors {@see \block_sqlreports::user_has_display_role}: empty config means no restriction;
+     * otherwise the viewer must hold one of the configured roles in the block's context or a parent.
+     * Site administrators always pass.
+     *
+     * @param \context $context The block instance context.
+     * @param \stdClass $config The block instance config.
+     * @return bool
+     */
+    protected static function user_has_display_role(\context $context, \stdClass $config): bool {
+        global $USER;
+
+        $wanted = array_filter(array_map('intval', (array) ($config->roles ?? [])));
+        if (!$wanted) {
+            return true;
+        }
+        if (is_siteadmin()) {
+            return true;
+        }
+
+        // Role lookup walks up the context tree, so a course-level role is honoured here.
+        foreach (get_user_roles($context, $USER->id, true) as $ra) {
+            if (in_array((int) $ra->roleid, $wanted, true)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
