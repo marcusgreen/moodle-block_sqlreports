@@ -182,7 +182,7 @@ class block_sqlreports extends block_base {
         if ($ischart) {
             $this->content->text = $this->render_chart($rows, $chartmeta, $query);
         } else if ($reportid) {
-            $this->content->text = $this->render_report_table($query, $reportid, $pagecourseid);
+            $this->content->text = $this->render_report_table($query, $reportid, $pagecourseid, $hide);
             $rbtable = true;
         } else {
             $this->content->text = $this->render_table($rows, $query, $hide);
@@ -353,9 +353,15 @@ class block_sqlreports extends block_base {
      * @param \report_sql\local\query $query The bound query (for the page-course column).
      * @param int $reportid The bound Report Builder report id.
      * @param int $pagecourseid Host page course id, or 0 to skip page-course scoping.
+     * @param string[] $hide Output column names to omit from the rendered table.
      * @return string Report Builder report markup.
      */
-    protected function render_report_table(\report_sql\local\query $query, int $reportid, int $pagecourseid): string {
+    protected function render_report_table(
+        \report_sql\local\query $query,
+        int $reportid,
+        int $pagecourseid,
+        array $hide = []
+    ): string {
         try {
             $report = \core_reportbuilder\manager::get_report_from_id($reportid);
         } catch (\moodle_exception $e) {
@@ -390,11 +396,46 @@ class block_sqlreports extends block_base {
             }
         }
 
-        $outputpage = new \core_reportbuilder\output\custom_report($report->get_report_persistent(), false);
-        $output     = $this->page->get_renderer('core_reportbuilder');
-        $export     = $outputpage->export_for_template($output);
+        // Apply the instance's "hide columns" config to the RB output. Each report_sql column's RB
+        // unique identifier is "<entity>:<name>"; mark the matching columns unavailable so the
+        // datasource's get_active_columns() drops them from the rendered table.
+        //
+        // core_reportbuilder\manager caches one report instance per report+user for the whole request,
+        // so this same object is shared with any other SQL report block bound to the same report and
+        // with the standalone RB viewer. The mutation must therefore be undone once this block has
+        // rendered, or a sibling block (or the viewer) would inherit these hidden columns. We restore
+        // in a finally, and bust the datasource's active-columns cache on both edges (it is keyed on a
+        // modification timestamp that set_is_available does not touch) so the hide takes effect here
+        // and is genuinely gone afterwards. Nothing is written to the database.
+        $flipped = [];
+        if ($hide) {
+            $hideset = array_fill_keys($hide, true);
+            foreach ($report->get_columns() as $uid => $column) {
+                $name = substr($uid, strpos($uid, ':') + 1);
+                if (isset($hideset[$name])) {
+                    $column->set_is_available(false);
+                    $flipped[] = $column;
+                }
+            }
+            if ($flipped) {
+                \core_reportbuilder\datasource::report_elements_modified($reportid);
+            }
+        }
 
-        return html_writer::div($output->render_from_template('core_reportbuilder/report', $export));
+        try {
+            $outputpage = new \core_reportbuilder\output\custom_report($report->get_report_persistent(), false);
+            $output     = $this->page->get_renderer('core_reportbuilder');
+            $export     = $outputpage->export_for_template($output);
+
+            return html_writer::div($output->render_from_template('core_reportbuilder/report', $export));
+        } finally {
+            if ($flipped) {
+                foreach ($flipped as $column) {
+                    $column->set_is_available(true);
+                }
+                \core_reportbuilder\datasource::report_elements_modified($reportid);
+            }
+        }
     }
 
     /**
