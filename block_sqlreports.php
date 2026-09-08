@@ -284,6 +284,33 @@ class block_sqlreports extends block_base {
             }
         }
 
+        // Editing-only helper: surface the filter embed marker for this report so an editor can copy
+        // it into any filter-enabled text area to embed the same report inline. Hidden from ordinary
+        // viewers (it is raw markup, not content). The marker is a click-to-copy button (it is both
+        // the trigger and its own copy target), wired by core/copy_to_clipboard.
+        //
+        // The filter_sqlreports marker id is the bound Report Builder report id (query::from_report_id,
+        // as in /reportbuilder/view.php?id=), NOT the report_sql query id — so only a published query
+        // (one with a reportid) has a working embed marker.
+        if ($this->page->user_is_editing() && !empty($rec->reportid)) {
+            $marker   = '[[sqlreport:' . (int) $rec->reportid . ']]';
+            $targetid = 'sqlreports-embed-' . (int) ($this->instance->id ?? $rec->id);
+            $copybtn  = html_writer::tag('button', s($marker), [
+                'id'                             => $targetid,
+                'type'                           => 'button',
+                'class'                          => 'sqlreports-embedcopy btn btn-link btn-sm p-0',
+                'data-action'                    => 'copytoclipboard',
+                'data-clipboard-target'          => '#' . $targetid,
+                'data-clipboard-success-message' => get_string('embedcopied', 'block_sqlreports'),
+                'title'                          => get_string('embedcopy', 'block_sqlreports'),
+            ]);
+            $footer .= html_writer::div(
+                get_string('embedcode', 'block_sqlreports', $copybtn),
+                'sqlreports-embedcode small text-muted'
+            );
+            $this->page->requires->js_amd_inline("require(['core/copy_to_clipboard']);");
+        }
+
         $showfull = (bool) ($this->config->showfull ?? 0);
         if ($showfull && !empty($rec->reportid)) {
             $fullurl = new moodle_url('/reportbuilder/view.php', ['id' => (int) $rec->reportid]);
