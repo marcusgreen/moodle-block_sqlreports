@@ -49,3 +49,12 @@
 .block_sqlreports-chartmodal.has-datatable:fullscreen .chart-image {
     height: auto;
 }
+
+/* Click-to-copy filter embed marker (editing view only). Rendered as a button but reads as inline
+   code: monospace, no button chrome, copy cursor. */
+.sqlreports-embedcopy {
+    font-family: var(--bs-font-monospace, monospace);
+    vertical-align: baseline;
+    cursor: copy;
+}
+
